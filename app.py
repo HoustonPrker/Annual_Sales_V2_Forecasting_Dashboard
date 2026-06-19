@@ -167,6 +167,37 @@ section[data-testid="stSidebar"] .stButton > button:active{
   outline-offset: 2px !important;
 }
 
+/* Edit/delete icon buttons in Saved Forecasts (main content only) */
+section.main [data-testid="stButton"] button[kind="secondary"] {
+  background: transparent !important;
+  border: 1px solid #D0CCC4 !important;
+  box-shadow: none !important;
+  color: #7A8582 !important;
+  padding: 4px 8px !important;
+  font-size: 14px !important;
+  min-width: unset !important;
+}
+section.main [data-testid="stButton"] button[kind="secondary"]:hover {
+  background: #F6F3EC !important;
+  border-color: #9FB5AE !important;
+  color: #1A1F1D !important;
+}
+
+/* Download button — white background, dark text */
+[data-testid="stDownloadButton"] button,
+[data-testid="stDownloadButton"] a {
+  background: #ffffff !important;
+  color: #1A1F1D !important;
+  border: 1.5px solid #B8B4A8 !important;
+  box-shadow: none !important;
+}
+[data-testid="stDownloadButton"] button:hover,
+[data-testid="stDownloadButton"] a:hover {
+  background: #F6F3EC !important;
+  border-color: #06524B !important;
+  color: #06524B !important;
+}
+
 /* Tabular numbers */
 [data-testid="stMetricValue"],.ck-num{ font-variant-numeric:tabular-nums; }
 
