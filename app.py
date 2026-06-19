@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # ── Asset loading ──────────────────────────────────────────────────────────────
-DESIGN_DIR = r"\\kgs-fs04\Users\houstonp\Desktop\design_handoff_revenue_forecast"
+DESIGN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 @st.cache_data
 def load_b64(path):
@@ -22,7 +22,7 @@ def load_b64(path):
         return base64.b64encode(f.read()).decode()
 
 try:
-    SHAMROCK_B64 = load_b64(os.path.join(DESIGN_DIR, "assets", "shamrock-green.png"))
+    SHAMROCK_B64 = load_b64(os.path.join(DESIGN_DIR, "shamrock-green.png"))
     CHART_B64    = load_b64(os.path.join(DESIGN_DIR, "model_comparison.png"))
     HAS_ASSETS   = True
 except Exception:
@@ -600,6 +600,9 @@ elif page == "Saved Forecasts":
     if not ledger.empty:
         print(f"[LEDGER PAGE] Hospitals: {ledger['hospital_name'].tolist()}", flush=True)
 
+    if "edit_idx" not in st.session_state:
+        st.session_state.edit_idx = None
+
     if ledger.empty:
         st.markdown("""
 <div style="text-align:center;padding:64px 0;color:#7A8582;font-size:16px;">
@@ -608,41 +611,54 @@ elif page == "Saved Forecasts":
 """, unsafe_allow_html=True)
     else:
         ledger_display = ledger.iloc[::-1].reset_index(drop=True)
-        rows_html = ""
-        for _, row in ledger_display.iterrows():
-            rows_html += f"""
-<div style="display:grid;grid-template-columns:140px 1fr 70px 80px 70px 140px 160px 140px;
-            align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #EFEBE2;">
-  <div style="font-size:12px;color:#7A8582;">{row.get('timestamp','—')}</div>
-  <div style="font-size:15px;font-weight:600;color:#1A1F1D;">{row.get('hospital_name','—')}</div>
-  <div style="font-size:14px;color:#4A5552;">{int(row['adc']):,}</div>
-  <div style="font-size:14px;color:#4A5552;">{int(row['size']):,}</div>
-  <div style="font-size:14px;color:#4A5552;">{row.get('pd','—')}</div>
-  <div style="font-size:15px;font-weight:700;color:#92400E;font-variant-numeric:tabular-nums;">${int(row['low']):,}</div>
-  <div style="font-size:17px;font-weight:800;color:#06524B;font-variant-numeric:tabular-nums;">${int(row['predicted']):,}</div>
-  <div style="font-size:15px;font-weight:700;color:#14532D;font-variant-numeric:tabular-nums;">${int(row['high']):,}</div>
-</div>"""
 
-        st.markdown(f"""
-<div style="background:#fff;border:1px solid #E3E0D6;border-radius:14px;padding:28px 36px;
-            box-shadow:0 1px 2px rgba(6,82,75,0.06);margin-bottom:16px;">
-  <div style="display:grid;grid-template-columns:140px 1fr 70px 80px 70px 140px 160px 140px;
-              gap:16px;padding:0 0 10px;border-bottom:2px solid #E3E0D6;margin-bottom:2px;">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#7A8582;">When</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#7A8582;">Hospital</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#7A8582;">ADC</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#7A8582;">Sq Ft</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#7A8582;">PD</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#92400E;">Conservative</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#06524B;">Most Likely</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#14532D;">Optimistic</div>
-  </div>
-  {rows_html}
-  <div style="font-size:13px;color:#7A8582;margin-top:14px;">
-    {len(ledger_display)} forecast{"s" if len(ledger_display) != 1 else ""} saved
-  </div>
-</div>
-""", unsafe_allow_html=True)
+        # Column headers
+        hcols = st.columns([1.4, 2, 0.7, 0.8, 0.6, 1.2, 1.4, 1.2, 0.5, 0.5])
+        for col, label, color in zip(hcols, ["When","Hospital","ADC","Sq Ft","PD","Conservative","Most Likely","Optimistic","",""], ["#7A8582","#7A8582","#7A8582","#7A8582","#7A8582","#92400E","#06524B","#14532D","","",]):
+            col.markdown(f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:{color};padding-bottom:6px;border-bottom:2px solid #E3E0D6;">{label}</div>', unsafe_allow_html=True)
+
+        for i, row in ledger_display.iterrows():
+            real_idx = len(ledger) - 1 - i  # index in original (non-reversed) ledger
+
+            if st.session_state.edit_idx == real_idx:
+                # ── Edit form ──
+                with st.form(key=f"edit_form_{i}"):
+                    ec = st.columns([2, 0.8, 0.9, 0.7])
+                    new_name = ec[0].text_input("Hospital name", value=row.get("hospital_name",""))
+                    new_adc  = ec[1].number_input("ADC", value=int(row["adc"]), min_value=1)
+                    new_size = ec[2].number_input("Sq Ft", value=int(row["size"]), min_value=50)
+                    new_pd   = ec[3].selectbox("PD", ["Yes","No"], index=0 if row.get("pd")=="Yes" else 1)
+                    sc1, sc2 = st.columns([1,1])
+                    if sc1.form_submit_button("Save changes"):
+                        ledger.at[real_idx, "hospital_name"] = new_name
+                        ledger.at[real_idx, "adc"]           = new_adc
+                        ledger.at[real_idx, "size"]          = new_size
+                        ledger.at[real_idx, "pd"]            = new_pd
+                        ledger.to_csv(LEDGER_PATH, index=False)
+                        st.session_state.edit_idx = None
+                        st.rerun()
+                    if sc2.form_submit_button("Cancel"):
+                        st.session_state.edit_idx = None
+                        st.rerun()
+            else:
+                cols = st.columns([1.4, 2, 0.7, 0.8, 0.6, 1.2, 1.4, 1.2, 0.5, 0.5])
+                cols[0].markdown(f'<div style="font-size:12px;color:#7A8582;padding:10px 0;">{row.get("timestamp","—")}</div>', unsafe_allow_html=True)
+                cols[1].markdown(f'<div style="font-size:14px;font-weight:600;color:#1A1F1D;padding:10px 0;">{row.get("hospital_name","—")}</div>', unsafe_allow_html=True)
+                cols[2].markdown(f'<div style="font-size:13px;color:#4A5552;padding:10px 0;">{int(row["adc"]):,}</div>', unsafe_allow_html=True)
+                cols[3].markdown(f'<div style="font-size:13px;color:#4A5552;padding:10px 0;">{int(row["size"]):,}</div>', unsafe_allow_html=True)
+                cols[4].markdown(f'<div style="font-size:13px;color:#4A5552;padding:10px 0;">{row.get("pd","—")}</div>', unsafe_allow_html=True)
+                cols[5].markdown(f'<div style="font-size:13px;font-weight:700;color:#92400E;padding:10px 0;">${int(row["low"]):,}</div>', unsafe_allow_html=True)
+                cols[6].markdown(f'<div style="font-size:15px;font-weight:800;color:#06524B;padding:10px 0;">${int(row["predicted"]):,}</div>', unsafe_allow_html=True)
+                cols[7].markdown(f'<div style="font-size:13px;font-weight:700;color:#14532D;padding:10px 0;">${int(row["high"]):,}</div>', unsafe_allow_html=True)
+                if cols[8].button("✏️", key=f"edit_{i}"):
+                    st.session_state.edit_idx = real_idx
+                    st.rerun()
+                if cols[9].button("🗑️", key=f"del_{i}"):
+                    ledger = ledger.drop(index=real_idx).reset_index(drop=True)
+                    ledger.to_csv(LEDGER_PATH, index=False)
+                    st.rerun()
+
+        st.markdown(f'<div style="font-size:13px;color:#7A8582;margin-top:12px;">{len(ledger_display)} forecast{"s" if len(ledger_display) != 1 else ""} saved</div>', unsafe_allow_html=True)
 
         col_dl, _ = st.columns([1, 5])
         with col_dl:
