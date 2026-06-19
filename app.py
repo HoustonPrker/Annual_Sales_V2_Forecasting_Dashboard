@@ -179,7 +179,7 @@ section[data-testid="stSidebar"] .stButton > button:active{
 """, unsafe_allow_html=True)
 
 # ── Load model artifact ────────────────────────────────────────────────────────
-ARTIFACT_PATH = r"C:\Users\houstonp\Downloads\cloverkey_forecast_v2.joblib"
+ARTIFACT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cloverkey_forecast_v2.joblib")
 
 @st.cache_resource
 def load_artifact():
