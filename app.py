@@ -4,7 +4,11 @@ import numpy as np
 import joblib
 import os
 import base64
+import io
 from datetime import datetime
+from openpyxl import Workbook
+from openpyxl.styles import (PatternFill, Font, Alignment, Border, Side)
+from openpyxl.utils import get_column_letter
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -296,6 +300,76 @@ def get_comps(log_adic_in, log_size_in, pd_flag, top_n=3):
 
 def fmt(v):
     return f"${v:,.0f}"
+
+
+def build_excel(df):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Saved Forecasts"
+
+    headers = ["Date", "Hospital", "ADC", "Sq Ft", "PD", "Conservative", "Most Likely", "Optimistic", "Top Comps"]
+    col_keys = ["timestamp", "hospital_name", "adc", "size", "pd", "low", "predicted", "high", "top_comps"]
+    number_cols = {"adc", "size", "low", "predicted", "high"}
+
+    header_fill  = PatternFill("solid", fgColor="4472C4")
+    row_fill_a   = PatternFill("solid", fgColor="F2F2F2")
+    row_fill_b   = PatternFill("solid", fgColor="FFFFFF")
+    header_font  = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+    body_font    = Font(name="Calibri", size=11)
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=False)
+    left_align   = Alignment(horizontal="left",   vertical="center")
+    num_fmt      = '#,##0'
+
+    # Write headers
+    for col_i, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_i, value=header)
+        cell.fill   = header_fill
+        cell.font   = header_font
+        cell.alignment = center_align
+
+    # Write data rows
+    for row_i, (_, row) in enumerate(df.iterrows(), start=2):
+        fill = row_fill_a if row_i % 2 == 0 else row_fill_b
+        for col_i, key in enumerate(col_keys, start=1):
+            raw = row.get(key, "")
+            if key == "timestamp":
+                try:
+                    raw = datetime.strptime(str(raw), "%Y-%m-%d %H:%M").strftime("%-m/%-d/%Y")
+                except Exception:
+                    try:
+                        raw = datetime.strptime(str(raw), "%Y-%m-%d %H:%M").strftime("%m/%d/%Y")
+                    except Exception:
+                        pass
+            if key in number_cols:
+                try:
+                    raw = int(float(raw))
+                except Exception:
+                    pass
+            cell = ws.cell(row=row_i, column=col_i, value=raw)
+            cell.fill = fill
+            cell.font = body_font
+            cell.alignment = center_align if key in number_cols else left_align
+            if key in number_cols:
+                cell.number_format = num_fmt
+
+    # Auto-fit column widths
+    for col_i, _ in enumerate(headers, start=1):
+        max_len = 0
+        col_letter = get_column_letter(col_i)
+        for row in ws[col_letter]:
+            try:
+                max_len = max(max_len, len(str(row.value) if row.value else ""))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = max(12, max_len + 4)
+
+    # Freeze header row
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
 
 
 def save_forecast(row):
@@ -694,10 +768,10 @@ elif page == "Saved Forecasts":
         col_dl, _ = st.columns([1, 5])
         with col_dl:
             st.download_button(
-                "Download CSV",
-                data=ledger.to_csv(index=False),
-                file_name="cloverkey_forecasts.csv",
-                mime="text/csv",
+                "Download Excel",
+                data=build_excel(ledger),
+                file_name="cloverkey_forecasts.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
 # ════════════════════════════════════════════════════════════════════════════════
